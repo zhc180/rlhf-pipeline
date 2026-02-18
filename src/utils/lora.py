@@ -64,10 +64,6 @@ class LoRALinear(nn.Module):
         if self.base_layer.bias is not None:
             self.base_layer.bias.requires_grad = False
 
-        # ============================================================
-        # TODO: Initialize LoRA matrices A and B
-        # ============================================================
-        #
         # Create two nn.Parameter tensors:
         #   self.lora_A: shape (r, in_features)
         #   self.lora_B: shape (out_features, r)
@@ -79,10 +75,10 @@ class LoRALinear(nn.Module):
         # Why zeros for B? So that at the start of training, B @ A = 0,
         # meaning the model behaves exactly like the original pretrained model.
         # Training gradually learns the adaptation from this "zero init" state.
-        #
-        # Hint: nn.Parameter(torch.zeros(out_features, r))
-        # ============================================================
-        raise NotImplementedError("Implement LoRA matrix initialization")
+
+        self.lora_A = nn.Parameter(torch.empty(r, in_features))
+        self.lora_B = nn.Parameter(torch.zeros(out_features, r))
+        nn.init.kaiming_uniform_(self.lora_A, a=math.sqrt(5))
 
         # Dropout on the LoRA path
         self.lora_dropout = nn.Dropout(p=dropout) if dropout > 0 else nn.Identity()
