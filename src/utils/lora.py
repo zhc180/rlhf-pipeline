@@ -92,10 +92,6 @@ class LoRALinear(nn.Module):
         Returns:
             Output tensor of shape (..., out_features)
         """
-        # ============================================================
-        # TODO: Implement the forward pass
-        # ============================================================
-        #
         # Step 1: Compute the base layer output (frozen weights)
         #   base_output = self.base_layer(x)
         #
@@ -111,7 +107,13 @@ class LoRALinear(nn.Module):
         # Note: Be careful with tensor shapes. x might be 3D (batch, seq, features).
         # F.linear(x, weight) computes x @ weight^T, which handles batched input.
         # ============================================================
-        raise NotImplementedError("Implement LoRA forward pass")
+        base_output = self.base_layer(x)
+        lora_input = self.lora_dropout(x)
+        lora_output = F.linear(lora_input, self.lora_A)  # (batch, r)
+        lora_output = F.linear(lora_output, self.lora_B)  # (batch, out_features)
+        lora_output = lora_output * self.scaling
+
+        return base_output + lora_output
 
     def merge(self) -> nn.Linear:
         """Merge LoRA weights into the base layer for inference.
