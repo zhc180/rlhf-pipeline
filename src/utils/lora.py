@@ -235,15 +235,12 @@ def get_lora_parameters(model: nn.Module) -> List[nn.Parameter]:
     Returns:
         List of trainable parameters (only lora_A and lora_B)
     """
-    # ============================================================
-    # TODO: Collect all trainable parameters
-    # ============================================================
-    #
-    # Simple approach: return [p for p in model.parameters() if p.requires_grad]
-    #
-    # Better approach: explicitly find LoRALinear modules and get their A, B
-    # ============================================================
-    raise NotImplementedError("Implement LoRA parameter collection")
+    lora_params = []
+    for module in model.modules():
+        if isinstance(module, LoRALinear):
+            lora_params.append(module.lora_A)
+            lora_params.append(module.lora_B)
+    return lora_params
 
 
 def merge_lora_weights(model: nn.Module) -> nn.Module:
