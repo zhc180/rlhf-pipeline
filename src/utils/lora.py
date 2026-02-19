@@ -194,10 +194,6 @@ def apply_lora_to_model(
     if target_modules is None:
         target_modules = ["q_proj", "k_proj", "v_proj", "o_proj"]
 
-    # ============================================================
-    # TODO: Apply LoRA to the model
-    # ============================================================
-    #
     # Step 1: Freeze all parameters
     #   for param in model.parameters():
     #       param.requires_grad = False
@@ -213,17 +209,23 @@ def apply_lora_to_model(
     #   e) Use setattr(parent, child_name, lora_layer) to replace it
     #
     # Step 4: Print summary (how many LoRA params vs total params)
-    #
-    # Hint for navigating nested modules:
-    #   parts = module_path.split(".")
-    #   parent = model
-    #   for part in parts[:-1]:
-    #       parent = getattr(parent, part)
-    #   child_name = parts[-1]
-    #   original_layer = getattr(parent, child_name)
-    # ============================================================
-    raise NotImplementedError("Implement LoRA application")
+    for param in model.parameters():
+        param.requires_grad = False
 
+    target_modules = find_target_modules(model, target_modules)
+    for name in target_modules:
+        parts = name.split(".")
+        # get parent
+        parent = model
+        for part in parts[:-1]:
+            parent = getattr(parent, part)
+        child_name = parts[-1]
+        original_layer = getattr(parent, child_name)
+        lora_layer = LoRALinear(original_layer, r=r, alpha=alpha, dropout=dropout)
+        setattr(parent, child_name, lora_layer)
+    # Print summary of trainable parameters
+    print_trainable_parameters(model)
+    return model
 
 def get_lora_parameters(model: nn.Module) -> List[nn.Parameter]:
     """Get only the trainable LoRA parameters.
