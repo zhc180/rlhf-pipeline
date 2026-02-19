@@ -151,10 +151,6 @@ def find_target_modules(model: nn.Module, target_names: List[str]) -> List[str]:
     Returns:
         List of full module paths (e.g., "model.layers.0.self_attn.q_proj")
     """
-    # ============================================================
-    # TODO: Walk the model's named_modules and find matching Linear layers
-    # ============================================================
-    #
     # Iterate over model.named_modules()
     # For each (name, module):
     #   - Check if module is nn.Linear
@@ -163,7 +159,12 @@ def find_target_modules(model: nn.Module, target_names: List[str]) -> List[str]:
     #
     # Return the list of matching module paths
     # ============================================================
-    raise NotImplementedError("Implement target module finder")
+    target_modules = []
+    for name, module in model.named_modules():
+        if isinstance(module, nn.Linear) and name.split(".")[-1] in target_names:
+            print(f"Found target module: {name}")
+            target_modules.append(name)
+    return target_modules
 
 
 def apply_lora_to_model(
