@@ -132,8 +132,19 @@ class LoRALinear(nn.Module):
         # After merging, the layer behaves identically but without
         # the extra A, B matrix multiplications.
         # ============================================================
-        raise NotImplementedError("Implement LoRA weight merging")
-
+        delta_W = self.scaling * (self.lora_B @ self.lora_A)
+        merged_weight = self.base_layer.weight.data + delta_W
+        merged_layer = nn.Linear(
+            in_features=self.base_layer.in_features,
+            out_features=self.base_layer.out_features,
+            bias=self.base_layer.bias is not None, # Preserve bias if it exists
+        )
+        # copy merged weights and bias
+        merged_layer.weight.data.copy_(merged_weight)
+        if self.base_layer.bias is not None:
+            merged_layer.bias.data.copy_(self.base_layer.bias.data)
+            
+        return merged_layer 
 
 def find_target_modules(model: nn.Module, target_names: List[str]) -> List[str]:
     """Find all modules in the model that match target names.
@@ -251,16 +262,21 @@ def merge_lora_weights(model: nn.Module) -> nn.Module:
     Returns:
         Model with merged weights (plain Linear layers, no LoRA)
     """
-    # ============================================================
-    # TODO: Find all LoRALinear modules and call .merge() on them
-    # ============================================================
-    #
     # For each named_module in the model:
     #   If it's a LoRALinear instance, replace it with merged result
     #   (Same parent/child navigation as apply_lora_to_model)
     # ============================================================
-    raise NotImplementedError("Implement LoRA weight merging for full model")
-
+    
+    for name, module in model.named_modules():
+        if isinstance(module, LoRALinear):
+            parts = name.split(".")
+            parent = model
+            for part in parts[:-1]:
+                parent = getattr(parent, part)
+            child_name = parts[-1]
+            merged_layer = module.merge()
+            setattr(parent, child_name, merged_layer)
+    return model
 
 def print_trainable_parameters(model: nn.Module) -> dict:
     """Print and return trainable parameter statistics."""
