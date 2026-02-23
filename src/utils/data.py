@@ -47,10 +47,6 @@ class PreferenceDataset(Dataset):
         self.tokenizer = tokenizer
         self.max_length = max_length
 
-        # ============================================================
-        # TODO: Load the dataset from Hugging Face
-        # ============================================================
-        #
         # Step 1: Load the dataset
         #   from datasets import load_dataset
         #   dataset = load_dataset("Anthropic/hh-rlhf", split=split)
@@ -67,9 +63,30 @@ class PreferenceDataset(Dataset):
         #   The response is everything after.
         #
         # Store results in self.examples as a list of RLHFExample
-        # ============================================================
         self.examples: List[RLHFExample] = []
-        raise NotImplementedError("Load and parse the HH-RLHF dataset")
+        from datasets import load_dataset
+        dataset = load_dataset("Anthropic/hh-rlhf", split=split)
+
+        if max_samples:
+            dataset = dataset.select(range(min(max_samples, len(dataset))))
+
+        for item in dataset:
+            chosen_prompt, chosen_response = self._extract_prompt_and_response(item["chosen"])
+            rejected_prompt, rejected_response = self._extract_prompt_and_response(item["rejected"])
+
+            # Prompts should usually match; prefer the chosen prompt when available.
+            prompt = chosen_prompt if chosen_prompt else rejected_prompt
+
+            if not prompt or not chosen_response or not rejected_response:
+                continue
+
+            self.examples.append(
+                RLHFExample(
+                    prompt=prompt,
+                    chosen=chosen_response,
+                    rejected=rejected_response,
+                )
+            )
 
     def _extract_prompt_and_response(self, text: str) -> Tuple[str, str]:
         """Split a conversation into (prompt, response).
@@ -79,10 +96,7 @@ class PreferenceDataset(Dataset):
 
         For multi-turn, take everything up to the LAST "Assistant:" as prompt.
         """
-        # ============================================================
-        # TODO: Parse the conversation format
-        # ============================================================
-        #
+        
         # Find the last occurrence of "\n\nAssistant:" in text
         # Split there: everything before + "Assistant:" = prompt
         #              everything after = response
@@ -90,8 +104,19 @@ class PreferenceDataset(Dataset):
         # Handle edge cases:
         #   - Strip whitespace from response
         #   - Handle missing "Assistant:" marker
-        # ============================================================
-        raise NotImplementedError("Parse conversation into prompt and response")
+        
+        text = text.strip()
+        marker = "\n\nAssistant:"
+        if marker not in text:
+            # If no marker, treat entire text as prompt and empty response
+            return text, ""
+        
+        last_marker_idx = text.rfind(marker)
+        prompt = text[:last_marker_idx + len(marker)].strip()
+        response = text[last_marker_idx + len(marker):].strip()
+
+        return prompt, response
+        
 
     def __len__(self) -> int:
         return len(self.examples)
@@ -108,10 +133,6 @@ class PreferenceDataset(Dataset):
         """
         example = self.examples[idx]
 
-        # ============================================================
-        # TODO: Tokenize the chosen and rejected sequences
-        # ============================================================
-        #
         # Step 1: Concatenate prompt + response for both chosen and rejected
         #   chosen_text = example.prompt + " " + example.chosen
         #   rejected_text = example.prompt + " " + example.rejected
@@ -126,8 +147,38 @@ class PreferenceDataset(Dataset):
         #   the response tokens, not the prompt.
         #
         # Return a dict with the keys listed above
-        # ============================================================
-        raise NotImplementedError("Tokenize preference pair")
+        chosen_text = f"{example.prompt} {example.chosen}"
+        rejected_text = f"{example.prompt} {example.rejected}"
+
+        chosen_tokens = self.tokenizer(
+            chosen_text,
+            max_length=self.max_length,
+            truncation=True,
+            padding="max_length",
+            return_tensors="pt",
+        )
+        rejected_tokens = self.tokenizer(
+            rejected_text,
+            max_length=self.max_length,
+            truncation=True,
+            padding="max_length",
+            return_tensors="pt",
+        )
+        prompt_tokens = self.tokenizer(
+            example.prompt,
+            max_length=self.max_length,
+            truncation=True,
+            return_tensors="pt",
+        )
+        prompt_length = int(prompt_tokens["attention_mask"].sum().item())
+
+        return {
+            "chosen_input_ids": chosen_tokens["input_ids"].squeeze(0),
+            "chosen_attention_mask": chosen_tokens["attention_mask"].squeeze(0),
+            "rejected_input_ids": rejected_tokens["input_ids"].squeeze(0),
+            "rejected_attention_mask": rejected_tokens["attention_mask"].squeeze(0),
+            "prompt_length": torch.tensor(prompt_length, dtype=torch.long),
+        }
 
 
 def create_preference_dataloader(
